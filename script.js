@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchButton = document.getElementById('searchButton');
     const newsContainer = document.getElementById('newsContainer');
 
-    const API_KEY = '84582a6ce8c44b4e9c7e2853530341c8';
     const PAGE_SIZE = 12; // 每頁12筆新聞
     let currentTopic = '今日新聞';
     let currentPage = 1;
@@ -14,27 +13,24 @@ document.addEventListener('DOMContentLoaded', () => {
             currentPage = page;
             newsContainer.innerHTML = '<p class="loading">載入中...</p>';
 
-            const newsApiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(topic)}&language=zh&sortBy=publishedAt&page=${page}&pageSize=${PAGE_SIZE * 2}&apiKey=${API_KEY}`;
-            const response = await fetch(newsApiUrl);
-            const data = await response.json();
+            // 使用 Google News RSS feed
+            const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=zh-TW&gl=TW&ceid=TW:zh-TW`;
+            const response = await fetch(rssUrl);
+            const text = await response.text();
+            
+            // 解析 RSS XML
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, "text/xml");
+            const items = Array.from(xml.querySelectorAll("item"));
+            
+            const newsItems = items.map(item => ({
+                title: item.querySelector("title").textContent,
+                link: item.querySelector("link").textContent,
+                pubDate: new Date(item.querySelector("pubDate").textContent),
+                source: item.querySelector("source").textContent
+            }));
 
-            if (data.status === 'ok' && data.articles) {
-                // 過濾掉沒有圖片的新聞
-                const newsItems = data.articles
-                    .filter(article => article.urlToImage)
-                    .slice(0, PAGE_SIZE)
-                    .map(article => ({
-                        title: article.title,
-                        link: article.url,
-                        pubDate: article.publishedAt,
-                        image: article.urlToImage,
-                        source: article.source.name
-                    }));
-
-                displayNews(newsItems, page, data.totalResults);
-            } else {
-                throw new Error('無法獲取新聞數據');
-            }
+            displayNews(newsItems.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE), page, newsItems.length);
         } catch (error) {
             console.error('獲取新聞時發生錯誤：', error);
             newsContainer.innerHTML = `<p class="no-news">${error.message || '獲取新聞時發生錯誤，請稍後再試。'}</p>`;
@@ -57,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const publishDate = new Date(item.pubDate).toLocaleDateString('zh-TW');
             
             newsCard.innerHTML = `
-                <img src="${item.image}" alt="${item.title}" class="news-image">
                 <h2>${item.title}</h2>
                 <div class="news-meta">
                     <span class="news-source">${item.source}</span>
@@ -74,7 +69,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const pagination = document.createElement('div');
             pagination.className = 'pagination';
             
-            // 上一頁按鈕
             if (page > 1) {
                 const prevButton = document.createElement('button');
                 prevButton.textContent = '上一頁';
@@ -82,13 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 pagination.appendChild(prevButton);
             }
 
-            // 頁碼
             const pageInfo = document.createElement('span');
             pageInfo.className = 'page-info';
             pageInfo.textContent = `${page} / ${totalPages}`;
             pagination.appendChild(pageInfo);
 
-            // 下一頁按鈕
             if (page < totalPages) {
                 const nextButton = document.createElement('button');
                 nextButton.textContent = '下一頁';
